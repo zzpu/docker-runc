@@ -183,7 +183,7 @@ func createContainer(context *cli.Context, id string, spec *specs.Spec) (libcont
 		}
 		return nil, err
 	}
-
+         //实现在docker\opencontainers\runc\Godeps\_workspace\src\github.com\opencontainers\runc\libcontainer\factory_linux.go
 	factory, err := loadFactory(context)
 	if err != nil {
 		return nil, err
@@ -212,6 +212,7 @@ func (r *runner) run(config *specs.Process) (int, error) {
 		process.Env = append(process.Env, fmt.Sprintf("LISTEN_FDS=%d", len(r.listenFDs)), "LISTEN_PID=1")
 		process.ExtraFiles = append(process.ExtraFiles, r.listenFDs...)
 	}
+	//container实现在docker\opencontainers\runc\Godeps\_workspace\src\github.com\opencontainers\runc\libcontainer\container_linux.go
 	rootuid, err := r.container.Config().HostUID()
 	if err != nil {
 		r.destroy()
@@ -222,12 +223,14 @@ func (r *runner) run(config *specs.Process) (int, error) {
 		r.destroy()
 		return -1, err
 	}
+	//设置伪终端
 	tty, err := setupIO(process, rootuid, rootgid, r.console, config.Terminal, r.detach || r.create)
 	if err != nil {
 		r.destroy()
 		return -1, err
 	}
 	handler := newSignalHandler(tty, r.enableSubreaper)
+	//container实现在docker\opencontainers\runc\Godeps\_workspace\src\github.com\opencontainers\runc\libcontainer\container_linux.go
 	if err := r.container.Start(process); err != nil {
 		r.destroy()
 		tty.Close()
@@ -297,6 +300,7 @@ func startContainer(context *cli.Context, spec *specs.Spec, create bool) (int, e
 	if id == "" {
 		return -1, errEmptyID
 	}
+	//container实现在docker\opencontainers\runc\Godeps\_workspace\src\github.com\opencontainers\runc\libcontainer\container_linux.go
 	container, err := createContainer(context, id, spec)
 	if err != nil {
 		return -1, err

@@ -206,10 +206,14 @@ func (c *linuxContainer) Run(process *Process) error {
 }
 
 func (c *linuxContainer) start(process *Process, isInit bool) error {
+	//newParentProcess来创建init的parent进程
+	//实现在docker\opencontainers\runc\Godeps\_workspace\src\github.com\opencontainers\runc\libcontainer\process_linux.go
 	parent, err := c.newParentProcess(process, isInit)
 	if err != nil {
 		return newSystemErrorWithCause(err, "creating new parent process")
 	}
+	//调用parent.start()异步启动parent进程。
+	//实现在docker\opencontainers\runc\Godeps\_workspace\src\github.com\opencontainers\runc\libcontainer\process_linux.go
 	if err := parent.start(); err != nil {
 		// terminate the process to ensure that it properly is reaped.
 		if err := parent.terminate(); err != nil {
@@ -223,9 +227,11 @@ func (c *linuxContainer) start(process *Process, isInit bool) error {
 		c: c,
 	}
 	if isInit {
+		//根据parent进程的状态更新容器的状态为Created
 		c.state = &createdState{
 			c: c,
 		}
+
 		if err := c.updateState(parent); err != nil {
 			return err
 		}
@@ -237,6 +243,7 @@ func (c *linuxContainer) start(process *Process, isInit bool) error {
 				Root:       c.config.Rootfs,
 				BundlePath: utils.SearchLabels(c.config.Labels, "bundle"),
 			}
+			//遍历spec里面的Poststart hook，分别调用
 			for i, hook := range c.config.Hooks.Poststart {
 				if err := hook.Run(s); err != nil {
 					if err := parent.terminate(); err != nil {
@@ -258,10 +265,12 @@ func (c *linuxContainer) Signal(s os.Signal) error {
 }
 
 func (c *linuxContainer) newParentProcess(p *Process, doInit bool) (parentProcess, error) {
+	//创建一对pipe——parentPipe和childPipe，打开rootDir
 	parentPipe, childPipe, err := newPipe()
 	if err != nil {
 		return nil, newSystemErrorWithCause(err, "creating new init pipe")
 	}
+	//创建一个command，命令为runc init自身（通过/proc/self/exe软链接实现）；标准io为当前进程的；工作目录为Rootfs；
 	cmd, err := c.commandTemplate(p, childPipe)
 	if err != nil {
 		return nil, newSystemErrorWithCause(err, "creating new command template")
@@ -269,6 +278,7 @@ func (c *linuxContainer) newParentProcess(p *Process, doInit bool) (parentProces
 	if !doInit {
 		return c.newSetnsProcess(p, cmd, parentPipe, childPipe)
 	}
+	//调用newInitProcess进一步将parent process和command封装为initProcess。主要工作为添加初始化类型环境变量，将namespace、uid/gid映射等配置信息用bootstrapData封装为一个io.Reader等。
 	return c.newInitProcess(p, cmd, parentPipe, childPipe)
 }
 
@@ -285,6 +295,7 @@ func (c *linuxContainer) commandTemplate(p *Process, childPipe *os.File) (*exec.
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}
 	cmd.ExtraFiles = append(p.ExtraFiles, childPipe)
+	//用ExtraFiles在新进程中保持打开childPipe和rootDir，并添加对应的环境变量。
 	cmd.Env = append(cmd.Env, fmt.Sprintf("_LIBCONTAINER_INITPIPE=%d", stdioFdCount+len(cmd.ExtraFiles)-1))
 	// NOTE: when running a container with no PID namespace and the parent process spawning the container is
 	// PID1 the pdeathsig is being delivered to the container's init process by the kernel for some reason

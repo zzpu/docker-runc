@@ -227,16 +227,20 @@ func (p *initProcess) execSetns() error {
 
 func (p *initProcess) start() error {
 	defer p.parentPipe.Close()
+	//异步启动cmd.Start()（等同于调用runc init）来启动init进程。
 	err := p.cmd.Start()
+	//将spec中process指定的ops指定为initProcess
 	p.process.ops = p
 	p.childPipe.Close()
 	if err != nil {
 		p.process.ops = nil
 		return newSystemErrorWithCause(err, "starting init process command")
 	}
+	//将前面创建bootstrapData从parentPipe传出去（init进程会从childPipe接收到这些数据，reverse出写入的内容，进行namespace相关的配置）
 	if _, err := io.Copy(p.parentPipe, p.bootstrapData); err != nil {
 		return err
 	}
+	//调用execSetns()，这个方法名看似是进行namespace的配置，实际上则是等待上面init进程的执行，并在parentPipe等待并解析出从childPipe传回的pid（谁的pid），找到该pid对应的进程，并将cmd.Process对应的进程替换为该进程。
 	if err := p.execSetns(); err != nil {
 		return newSystemErrorWithCause(err, "running exec setns process for init")
 	}
@@ -259,6 +263,8 @@ func (p *initProcess) start() error {
 			p.manager.Destroy()
 		}
 	}()
+	//创建容器中的network interface。
+	//将容器的配置文件内容spec从parentPipe发送给init进程
 	if err := p.createNetworkInterfaces(); err != nil {
 		return newSystemErrorWithCause(err, "creating nework interfaces")
 	}
